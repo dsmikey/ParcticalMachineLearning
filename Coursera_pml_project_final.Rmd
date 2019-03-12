@@ -89,7 +89,7 @@ dim(test)
 featurePlot(x=train[,-53], y=train$classe, labels=c("Feature", "")) # Correlation plot
 
 ```
-### Decision Tree model: cross validation and out of sample error= 1-accuracy = 25.54%
+### Decision Tree model: cross validation with 5 folds and out of sample error= 1-accuracy = 25.54%
 ```{r results = 'hide', fig.show="hide"}
 
 tcDT <- trainControl(method = "cv", number =5)
@@ -102,7 +102,7 @@ modDT1$finalModel
 fancyRpartPlot(modDT1)
 ```
 
-### Random Forest model: cross validation and out of sample error = 1-accuracy = 0.71%
+### Random Forest model: cross validation with 10 folds and out of sample error = 1-accuracy = 0.71%
 ```{r results = 'hide', fig.show="hide"}
 library(randomForest)
 
@@ -117,7 +117,7 @@ modRF$finalModel
 plot(modRF$finalModel)
 ```
 
-### Boosting model: cross validation and out of sample error= 1-accuracy = 4.01%
+### Boosting model: cross validation with 10 folds and out of sample error= 1-accuracy = 4.01%
 ```{r results = 'hide', fig.show="hide"}
 library(gbm)
 
