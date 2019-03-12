@@ -1,0 +1,143 @@
+## Pratical Machine Learning Course Project
+========================================================
+
+
+### Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. 
+
+In this project, my goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset). 
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. This report and script will detail how to build my model and finally to predict 20 different test cases.
+
+### Read data and exploration
+
+```{r include = TRUE, echo = TRUE, message = FALSE, warning = FALSE}
+library(Hmisc)
+library(ggplot2)
+library(caret)
+library(rattle)
+library(rpart)
+library(randomForest)
+library(gbm)
+
+pmltraining <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"), header=T)
+pmltesting <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"), header=T)
+
+options(max.print=10000)  # Increase max.print
+
+# Examine all vraibale in both datasets: Missing values, row ids
+
+dim(pmltraining) # [1] 19622   160 Variables; Lots of variables with missing values
+dim(pmltesting)  # [1]  20 160 Variables
+
+trainNA <- colSums(is.na(pmltraining) | (pmltraining==""))/dim(pmltraining)[1] # Ratio of missing values
+table(trainNA) # Column missing percentage: either <0.1% or >90% (impposible to impute when 90% are missing)
+```
+#### Based on the results above: 
+##### 0. Remove Columns where missing data percentage > 10%
+##### 1. Remove problem_id from testing set and X another row id from both datasets
+##### 2. Remove variables won't provide much information for real-time prediction: X+raw_timestamp_part_1+raw_timestamp_part_2+cvtd_timestamp+new_window+num_window from both dataset. 
+##### 3. User_name might be useful since there a correlation by the plot below. It is useful for data impuation later if needed
+
+```{r results = 'hide', fig.show="hide"}
+p <- ggplot(pmltraining, aes(x=classe, y=yaw_belt, group=classe)) + 
+     geom_boxplot(aes(fill=classe)) + facet_grid(. ~ user_name) 
+p
+```
+
+### Cleansing the data 
+
+```{r include = TRUE, message = FALSE, warning = FALSE}
+
+training<- pmltraining[,trainNA < 0.1]
+dim(training)
+testing<- pmltesting[, trainNA < 0.1]
+dim(testing)
+
+setdiff(colnames(training), colnames(testing)) # classe which is outcome variable and only in training set
+setdiff(colnames(testing), colnames(training)) # problem_id which is a row id and only in testing set
+
+training <- training[, -c(1:7)]
+testing <- testing[, -c(1:7, 60)]
+
+dim(training)
+dim(testing)
+```
+### Data split and Exploratory data analyses: Summary statistics, correlations, plot
+```{r results = 'hide', fig.show="hide"}
+
+# Split data
+set.seed(321) 
+inTrain <- createDataPartition(training$classe, p=0.7, list =F)
+train <- training[inTrain, ]
+validation <- training[-inTrain, ]
+test <- testing
+
+NZV <- nearZeroVar(train)
+NZV
+
+dim(train)
+dim(validation)
+dim(test)
+
+#tt <-train[1,-(sapply(train, is.factor))]
+# corrplot(cor(train[,-53]), order = "FPC", method = "color", type = "upper", tl.cex = 0.8, tl.col = rgb(0, 0, 0))
+#highlyCorrelated = findCorrelation(cor(train[,-53]), cutoff=0.75)
+#names(trainData)[highlyCorrelated]
+
+featurePlot(x=train[,-53], y=train$classe, labels=c("Feature", "")) # Correlation plot
+
+```
+### Decision Tree model: cross validation and out of sample error= 1-accuracy = 25.54%
+```{r results = 'hide', fig.show="hide"}
+
+tcDT <- trainControl(method = "cv", number =5)
+set.seed(321)
+modDT1 <- rpart(classe ~ ., data=train, method="class")
+predDT1 <- predict(modDT1, validation, type = "class")
+accuracyDT1 <- confusionMatrix(predDT1, validation$classe)
+accuracyDT1
+modDT1$finalModel
+fancyRpartPlot(modDT1)
+```
+
+### Random Forest model: cross validation and out of sample error = 1-accuracy = 0.71%
+```{r results = 'hide', fig.show="hide"}
+library(randomForest)
+
+#tcRF <- trainControl(method="cv", number=10)
+controlRF <- trainControl(method="cv", number=5, verboseIter=FALSE)
+set.seed(321)
+modRF <- train(classe~., data= train, method = "rf", trControl=controlRF)
+predRF <- predict(modRF, validation)
+cmRF <- confusionMatrix(predRF, validation$classe)
+cmRF
+modRF$finalModel
+plot(modRF$finalModel)
+```
+
+### Boosting model: cross validation and out of sample error= 1-accuracy = 4.01%
+```{r results = 'hide', fig.show="hide"}
+library(gbm)
+
+tcBST <- trainControl("cv",10)
+set.seed(321)
+modBST <- train(classe~., data= train, method = "gbm", verbose = F, trControl =tcBST) 
+
+predBST <- predict(modBST, validation)
+
+cmBST <- confusionMatrix(predBST, validation$classe)
+cmBST
+modBST$finalModel
+```
+
+### Final model: The random forest model has the highest accuracy.
+
+```{r results = 'hide', fig.show="hide"}
+ 
+predTest <- predict(modRF, testing)
+
+predTest
+```
+#### [1] B A B A A E D B A A B C B A E E A B B B
